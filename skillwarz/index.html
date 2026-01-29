@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <title>Haunted School 2 - Githack</title>
+    <style>
+        body { margin: 0; background: #000; color: #0f0; font-family: monospace; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; }
+        #debug { position: absolute; top: 10px; left: 10px; font-size: 11px; text-align: left; max-width: 90%; word-break: break-all; color: #666; }
+        .box { border: 1px solid #333; padding: 30px; background: #050505; text-align: center; box-shadow: 0 0 20px rgba(0,255,0,0.1); }
+        .progress { width: 250px; height: 4px; background: #111; margin: 20px 0; border-radius: 2px; overflow: hidden; }
+        #fill { width: 0%; height: 100%; background: #0f0; transition: width 0.3s; }
+        #canvas { width: 100vw; height: 100vh; display: none; }
+        button { display: none; padding: 12px 30px; background: #0f0; color: #000; border: none; cursor: pointer; font-weight: bold; letter-spacing: 1px; }
+        button:hover { background: #0c0; }
+    </style>
+</head>
+<body>
+
+    <div id="debug">GITHACK RELAY INITIALIZED...</div>
+
+    <div id="ui" class="box">
+        <div id="msg">SYNCING ASSETS...</div>
+        <div class="progress"><div id="fill"></div></div>
+        <button id="run">LAUNCH GAME</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+    const log = (m) => { document.getElementById('debug').innerHTML += `<br>> ${m}`; };
+    
+    // Exact paths from your GitHub repository
+    const BASE = "https://raw.githack.com/dskjfoisjfsjio/Standalone-games/main/haunted%20school%202/Build/";
+    
+    const ASSETS = {
+        "wasm": { name: "78b2ea255a528aef8b47297ec95928fb.wasm", parts: 3 },
+        "data": { name: "d7b29b9d628afa6f305ffeac364b4c05.data", parts: 3 }
+    };
+
+    let blobs = {};
+
+    async function load() {
+        try {
+            for (const key in ASSETS) {
+                const file = ASSETS[key];
+                let chunks = [];
+                for (let i = 1; i <= file.parts; i++) {
+                    const r = await fetch(`${BASE}${file.name}.part${i}`);
+                    if (!r.ok) throw new Error(`404: ${file.name}.part${i}`);
+                    chunks.push(await r.arrayBuffer());
+                    document.getElementById('fill').style.width = `${(i / file.parts) * 100}%`;
+                }
+                // MIME injection to ensure the browser compiles WASM correctly
+                const type = key === "wasm" ? "application/wasm" : "application/octet-stream";
+                blobs[file.name] = URL.createObjectURL(new Blob(chunks, { type: type }));
+                log(`Merged ${key.toUpperCase()}`);
+            }
+            document.getElementById('msg').innerText = "SYSTEMS READY";
+            document.getElementById('run').style.display = "inline-block";
+        } catch (e) { log(`FAIL: ${e.message}`); }
+    }
+
+    document.getElementById('run').onclick = () => {
+        document.getElementById('ui').style.display = 'none';
+        document.getElementById('canvas').style.display = 'block';
+        launch();
+    };
+
+    function launch() {
+        const originalFetch = window.fetch;
+        window.fetch = (input, init) => {
+            let url = typeof input === 'string' ? input : input.url;
+            const filename = url.split('/').pop();
+
+            if (blobs[filename]) {
+                return originalFetch(blobs[filename], init).then(r => {
+                    if (filename.endsWith('.wasm')) {
+                        return new Response(r.body, { headers: { 'Content-Type': 'application/wasm' } });
+                    }
+                    return r;
+                });
+            }
+            if (!url.startsWith('blob:') && !url.startsWith('http')) {
+                return originalFetch(BASE + filename, init);
+            }
+            return originalFetch(input, init);
+        };
+
+        const config = {
+            dataUrl: blobs["d7b29b9d628afa6f305ffeac364b4c05.data"],
+            frameworkUrl: BASE + "14fba65d1a8afc65a4e57b6a70839bea.js",
+            codeUrl: blobs["78b2ea255a528aef8b47297ec95928fb.wasm"],
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "DefaultCompany",
+            productName: "Haunted School 2",
+            productVersion: "1.0",
+        };
+
+        const script = document.createElement("script");
+        script.src = BASE + "haunted-scholl-2.loader.js"; 
+        script.onload = () => {
+            createUnityInstance(document.getElementById("canvas"), config, (p) => {})
+            .then(() => { log("Instance Active."); })
+            .catch(e => log(`Unity: ${e}`));
+        };
+        document.body.appendChild(script);
+    }
+
+    load();
+    </script>
+</body>
+</html>
