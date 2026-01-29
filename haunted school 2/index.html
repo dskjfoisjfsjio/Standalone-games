@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="utf-8">
+    <title>Horror Tale - Total Fix</title>
+    <style>
+        body { margin: 0; background: #000; color: #00ff00; font-family: 'Courier New', monospace; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; }
+        #debug-log { position: absolute; top: 10px; left: 10px; color: #00ff00; font-size: 11px; text-align: left; width: 100%; pointer-events: none; opacity: 0.8; }
+        .ui-box { text-align: center; border: 1px solid #333; padding: 20px; background: #050505; }
+        .bar-bg { width: 300px; height: 4px; background: #111; margin: 15px 0; }
+        #bar-fill { width: 0%; height: 100%; background: #00ff00; box-shadow: 0 0 10px #00ff00; }
+        #canvas { width: 100vw; height: 100vh; display: none; }
+        #start-btn { display: none; padding: 12px 35px; background: transparent; color: #00ff00; border: 1px solid #00ff00; cursor: pointer; font-family: inherit; font-weight: bold; }
+        #start-btn:hover { background: #00ff00; color: #000; }
+    </style>
+</head>
+<body>
+
+    <div id="debug-log">READY...</div>
+
+    <div id="loader-ui" class="ui-box">
+        <div id="status" style="font-size: 14px;">ASSEMBLING VOLUMES</div>
+        <div class="bar-bg"><div id="bar-fill"></div></div>
+        <button id="start-btn">ENGAGE ENGINE</button>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+    const log = (msg) => {
+        const d = document.getElementById('debug-log');
+        d.innerHTML += `<br>> ${msg}`;
+        console.log(msg);
+    };
+
+    // Correcting paths based on your image_43b112.png
+    const GH_USER = "dskjfoisjfsjio";
+    const GH_REPO = "Standalone-games";
+    const FOLDER = "horror%20tale/Build/"; 
+    const BASE = `https://cdn.jsdelivr.net/gh/${GH_USER}/${GH_REPO}@main/${FOLDER}`;
+    
+    const ASSETS = {
+        "wasm": { name: "64abbec2f88a03563b717f5964ff9276.wasm", parts: 4 },
+        "data": { name: "728121e7c659be57f9f9e2176c5a8e6f.data", parts: 7 }
+    };
+
+    let blobs = {};
+
+    async function download() {
+        try {
+            for (const key in ASSETS) {
+                const file = ASSETS[key];
+                let chunks = [];
+                for (let i = 1; i <= file.parts; i++) {
+                    const r = await fetch(`${BASE}${file.name}.part${i}`);
+                    if (!r.ok) throw new Error(`CDN Error: ${file.name}.part${i}`);
+                    chunks.push(await r.arrayBuffer());
+                    document.getElementById('bar-fill').style.width = `${(i / file.parts) * 100}%`;
+                    await new Promise(res => setTimeout(res, 40)); // Memory safety
+                }
+                blobs[file.name] = URL.createObjectURL(new Blob(chunks));
+                chunks = null;
+                log(`Loaded: ${key}`);
+            }
+            document.getElementById('status').innerText = "STABILIZED";
+            document.getElementById('start-btn').style.display = "block";
+        } catch (e) {
+            log(`CRITICAL: ${e.message}`);
+        }
+    }
+
+    document.getElementById('start-btn').onclick = () => {
+        document.getElementById('loader-ui').style.display = 'none';
+        document.getElementById('canvas').style.display = 'block';
+        launch();
+    };
+
+    function launch() {
+        const canvas = document.getElementById("canvas");
+        const originalFetch = window.fetch;
+
+        // FORCED REDIRECTION: This stops the Black Screen
+        window.fetch = (input, init) => {
+            let url = typeof input === 'string' ? input : input.url;
+            const filename = url.split('/').pop();
+
+            // 1. Check if we have a reassembled Blob
+            if (blobs[filename]) return originalFetch(blobs[filename], init);
+            
+            // 2. If it's a random hex filename (Asset Bundle), force it to the GitHub Build path
+            if (!url.startsWith('blob:') && !url.startsWith('http')) {
+                log(`Mapping Asset: ${filename}`);
+                return originalFetch(BASE + filename, init);
+            }
+            
+            return originalFetch(input, init);
+        };
+
+        const config = {
+            dataUrl: blobs["728121e7c659be57f9f9e2176c5a8e6f.data"],
+            frameworkUrl: BASE + "e3d224c7579ce482432b81cb09f2d68e.framework.js",
+            codeUrl: blobs["64abbec2f88a03563b717f5964ff9276.wasm"],
+            streamingAssetsUrl: "StreamingAssets",
+            companyName: "DefaultCompany",
+            productName: "Horror Tale",
+            productVersion: "1.0",
+        };
+
+        const script = document.createElement("script");
+        script.src = BASE + "bb0d9ecdb05db3e84da20bd14a4f84dc.loader.js";
+        script.onload = () => {
+            createUnityInstance(canvas, config, (p) => {}).then(() => {
+                log("Active.");
+            }).catch(err => log(`Crash: ${err}`));
+        };
+        document.body.appendChild(script);
+    }
+
+    download();
+    </script>
+</body>
+</html>
