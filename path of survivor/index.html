@@ -46,7 +46,7 @@
           chunks.push(new Uint8Array(await r.arrayBuffer()));
           bar.style.width = (start + ((i / file.parts) * (end - start))) + "%";
         }
-        return URL.createObjectURL(new Blob(chunks));
+        return URL.createObjectURL(new Blob(chunks, { type: 'application/octet-stream' }));
       }
 
       async function init() {
@@ -60,8 +60,12 @@
             const open = xhr.open;
             xhr.open = function(m, url) {
               let t = url;
-              if (url.includes(FILES.wasm.hash)) t = wBlob;
-              if (url.includes(FILES.data.hash)) t = dBlob;
+              // Extract just the filename from the requested URL to compare
+              const filename = url.substring(url.lastIndexOf('/') + 1);
+              
+              if (filename.includes(FILES.wasm.hash)) t = wBlob;
+              else if (filename.includes(FILES.data.hash)) t = dBlob;
+              
               return open.apply(this, [m, t, ...Array.from(arguments).slice(2)]);
             };
             return xhr;
@@ -90,6 +94,7 @@
           document.body.appendChild(s);
         } catch (e) {
           msg.innerText = "Error Loading Game";
+          console.error(e);
         }
       }
 
